@@ -58,15 +58,15 @@ def layers(vgg_layer3_out, vgg_layer4_out, vgg_layer7_out, num_classes):
     # 1x1 conv on layer 7
     layer7_1x1 = tf.layers.conv2d(vgg_layer7_out, num_classes, 1, padding = 'same', kernel_initializer = tf.random_normal_initializer(stddev=0.01),
                 kernel_regularizer = tf.contrib.layers.l2_regularizer(1e-3))
-    #Upsample
+    # Deconvolution/Upsampling
     layer4_in1 = tf.layers.conv2d_transpose(layer7_1x1, num_classes, 4, strides = (2,2), padding = 'same',
                 kernel_initializer = tf.random_normal_initializer(stddev=0.01), kernel_regularizer = tf.contrib.layers.l2_regularizer(1e-3))
-    #1x1 conv on layer 4
+    # 1x1 conv on layer 4
     layer4_1x1 = tf.layers.conv2d(vgg_layer4_out, num_classes, 1, padding = 'same', kernel_initializer = tf.random_normal_initializer(stddev=0.01),
                 kernel_regularizer = tf.contrib.layers.l2_regularizer(1e-3))
-    #Skip conection 7-4
+    # Skip conection 7-4
     layer4_skipped = tf.add(layer4_in1, layer4_1x1)
-    #  Upsample
+    # Deconvolution/Upsampling
     layer3_in1 = tf.layers.conv2d_transpose(layer4_skipped, num_classes, 4, strides = (2,2), padding = 'same', 
                 kernel_initializer = tf.random_normal_initializer(stddev=0.01), kernel_regularizer = tf.contrib.layers.l2_regularizer(1e-3))
     # 1x1 conv on layer 3
@@ -74,7 +74,7 @@ def layers(vgg_layer3_out, vgg_layer4_out, vgg_layer7_out, num_classes):
                 kernel_regularizer = tf.contrib.layers.l2_regularizer(1e-3))
     # Skip connection 4-3
     layer3_skipped = tf.add(layer3_in1, layer3_1x1)
-    #upsample
+    # Deconvolution/Upsampling
     nn_last_layer = tf.layers.conv2d_transpose(layer3_skipped, num_classes, 16, strides = (8,8), padding = 'same',
                     kernel_initializer = tf.random_normal_initializer(stddev = 0.01), kernel_regularizer = tf.contrib.layers.l2_regularizer(1e-3))
     return nn_last_layer
@@ -119,21 +119,25 @@ def train_nn(sess, epochs, batch_size, get_batches_fn, train_op, cross_entropy_l
     logs_dir = './logs'
     sess.run(tf.global_variables_initializer())
     #train_writer = tf.summary.FileWriter(os.path.join(logs_dir, "Semantic_seg_trained.ckpt"), sess.graph)
-    print("Training...")
+    print("Beginning of training...")
     for i in range(epochs):
         print("EPOCH {}".format(i))
         for image, label in get_batches_fn(batch_size):
             _, loss = sess.run([train_op, cross_entropy_loss], feed_dict = {input_image: image, correct_label: label,
                         keep_prob: 0.75, learning_rate: 0.0001})
-        print("Loss: {:.3f}\n".format(loss))
+        print("Loss: {:.4f}\n".format(loss))
         #train_writer.add_summary(loss, i)
-        if loss < .01:
-            print("Low loss, stopping now...")
+        if loss < .001:
+            print("Loss has been minimized...")
             return
 tests.test_train_nn(train_nn)
 
 
 def run(train=True):
+"""
+    Train and inference from a neural network
+    :param train: Is the model being trained or used for inference
+"""
     num_classes = 2
     image_shape = (160, 576)  # KITTI dataset uses 160x576 images
     data_dir = './data'
@@ -175,10 +179,10 @@ def run(train=True):
             train_nn(sess, epochs, batch_size, get_batches_fn, train_op, cross_entropy_loss, input_image, correct_label, keep_prob, learning_rate)
             # TODO: Save inference data using helper.save_inference_samples
             # predict_video(sess, image_shape, logits, keep_prob, input_image)
-            save_path = tf.train.Saver().save(sess, os.path.join(model_dir, "Semantic_seg_trained.ckpt"))
+            save_path = tf.train.Saver().save(sess, os.path.join(model_dir, "trained.ckpt"))
         else:
-            saver = tf.train.import_meta_graph(os.path.join(model_dir, "Semantic_seg_trained.ckpt.meta"))
-            saver.restore(sess, (os.path.join(model_dir, "Semantic_seg_trained.ckpt")))
+            saver = tf.train.import_meta_graph(os.path.join(model_dir, "trained.ckpt.meta"))
+            saver.restore(sess, (os.path.join(model_dir, "trained.ckpt")))
 
         helper.save_inference_samples(runs_dir, data_dir, sess, image_shape, logits, keep_prob, input_image)
         # OPTIONAL: Apply the trained model to a video
